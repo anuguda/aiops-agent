@@ -37,7 +37,9 @@ ensure_namespace() {
 
 ensure_secret() {
   ensure_namespace
-  # Preserve existing keys; layer env-provided values on top (upstream pattern).
+  # Env-provided values override; absent values are resolved from the live
+  # Secret. Only the two managed keys are ever patched, so keys an operator
+  # added to the live Secret survive untouched by design.
   local tmp
   tmp="$(mktemp -d)"
 
@@ -68,9 +70,9 @@ except Exception:
 
   gateway_token="${existing_token:-$(openssl rand -hex 32)}"
 
-  # Preserve the provider key across re-runs: kubectl apply is a 3-way
-  # merge, so a re-run without the env var must re-emit the existing key
-  # or it would be dropped from the Secret.
+  # Resolve the provider key from the live Secret when the env var is
+  # absent: the merge-patch below writes a value for every managed key,
+  # and the deployment's gateway env consumes this too.
   openrouter_key="${OPENROUTER_API_KEY:-}"
   if [ -z "$openrouter_key" ]; then
     if command -v jq >/dev/null 2>&1; then
@@ -94,19 +96,33 @@ except Exception:
     exit 1
   fi
 
-  {
-    echo "apiVersion: v1"
-    echo "kind: Secret"
-    echo "metadata:"
-    echo "  name: $SECRET_NAME"
-    echo "  namespace: $NS"
-    echo "type: Opaque"
-    echo "stringData:"
-    echo "  OPENCLAW_GATEWAY_TOKEN: $gateway_token"
-    echo "  OPENROUTER_API_KEY: $openrouter_key"
-  } >"$tmp/secret.yaml"
+  # Update via merge-patch, never whole-object apply: the patch touches
+  # exactly the two managed keys, so keys an operator added to the live
+  # Secret survive untouched whatever kubectl does with apply deletions.
+  if command -v jq >/dev/null 2>&1; then
+    inner="$(jq -nc --arg t "$gateway_token" --arg k "$openrouter_key" \
+      '{OPENCLAW_GATEWAY_TOKEN: $t, OPENROUTER_API_KEY: $k}')"
+  else
+    inner="$(python3 -c 'import json, sys
+print(json.dumps({"OPENCLAW_GATEWAY_TOKEN": sys.argv[1], "OPENROUTER_API_KEY": sys.argv[2]}))' \
+      "$gateway_token" "$openrouter_key")"
+  fi
 
-  kubectl apply -f "$tmp/secret.yaml" >/dev/null
+  if kubectl -n "$NS" get secret "$SECRET_NAME" >/dev/null 2>&1; then
+    kubectl -n "$NS" patch secret "$SECRET_NAME" --type=merge \
+      -p "{\"stringData\":$inner}" >/dev/null
+  else
+    {
+      echo "apiVersion: v1"
+      echo "kind: Secret"
+      echo "metadata:"
+      echo "  name: $SECRET_NAME"
+      echo "  namespace: $NS"
+      echo "type: Opaque"
+      printf 'stringData: %s\n' "$inner"
+    } >"$tmp/secret.yaml"
+    kubectl apply -f "$tmp/secret.yaml" >/dev/null
+  fi
   rm -rf "$tmp"
   echo "Secret $SECRET_NAME ready in namespace $NS."
 }
