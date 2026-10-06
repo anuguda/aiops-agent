@@ -180,6 +180,9 @@ deploy_autoheal() {
   # Same namespace-tracking patch as the base's ClusterRoleBinding.
   kubectl patch clusterrolebinding autoheal --type=json \
     -p "[{\"op\":\"replace\",\"path\":\"/subjects/0/namespace\",\"value\":\"$NS\"}]"
+  # Role subjects too: same caveat — apply -n does not rewrite them.
+  kubectl patch -n "$NS" rolebinding autoheal-memory --type=json \
+    -p "[{\"op\":\"replace\",\"path\":\"/subjects/0/namespace\",\"value\":\"$NS\"}]"
   kubectl rollout status deployment/autoheal -n "$NS" --timeout=300s
   echo
   echo "Autoheal controller deployed: policy mode 'assisted', RBAC profile 'safe'."

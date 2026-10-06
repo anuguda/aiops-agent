@@ -136,6 +136,9 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: autoheal-memory
+  # Namespace is rewritten by scripts/deploy.sh to track AIOPS_NAMESPACE:
+  # `kubectl apply -n` places objects into the namespace but never rewrites
+  # hardcoded subject namespaces.
 subjects:
   - kind: ServiceAccount
     name: autoheal

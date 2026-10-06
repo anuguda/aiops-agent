@@ -12,6 +12,8 @@ root (`autoheal/kustomization.yaml`) explicitly:
 kubectl kustomize autoheal | kubectl apply -n aiops-agent -f -
 kubectl patch clusterrolebinding autoheal --type=json \
   -p '[{"op":"replace","path":"/subjects/0/namespace","value":"aiops-agent"}]'
+kubectl patch -n aiops-agent rolebinding autoheal-memory --type=json \
+  -p '[{"op":"replace","path":"/subjects/0/namespace","value":"aiops-agent"}]'
 kubectl rollout status deployment/autoheal -n aiops-agent
 ```
 
