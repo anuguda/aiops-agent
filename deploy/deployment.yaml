@@ -1,0 +1,192 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openclaw
+  labels:
+    app: openclaw
+    app.kubernetes.io/part-of: aiops-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openclaw
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: openclaw
+    spec:
+      serviceAccountName: aiops-sre
+      # Upstream OpenClaw pins this to false. The SRE assistant's staged
+      # kubectl authenticates with this ServiceAccount credential, so it is
+      # mounted deliberately — see docs/architecture.md for the trust model.
+      automountServiceAccountToken: true
+      securityContext:
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: init-config
+          image: busybox:1.38
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              # Seed-if-missing: the PVC copy owns config after first boot so
+              # edits made through OpenClaw (onboard, doctor --fix, Control UI)
+              # survive restarts. ConfigMap edits need an explicit reseed; see
+              # README ("Update agent content").
+              [ -f /home/node/.openclaw/openclaw.json ] || cp /config/openclaw.json /home/node/.openclaw/openclaw.json
+              mkdir -p /home/node/.openclaw/workspace/skills/kubernetes-sre /home/node/.openclaw/bin
+              [ -f /home/node/.openclaw/workspace/AGENTS.md ] || cp /config/AGENTS.md /home/node/.openclaw/workspace/AGENTS.md
+              [ -f /home/node/.openclaw/workspace/skills/kubernetes-sre/SKILL.md ] || cp /config/kubernetes-sre-SKILL.md /home/node/.openclaw/workspace/skills/kubernetes-sre/SKILL.md
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 50m
+            limits:
+              memory: 64Mi
+              cpu: 100m
+          volumeMounts:
+            - name: openclaw-home
+              mountPath: /home/node/.openclaw
+            - name: config
+              mountPath: /config
+        - name: init-kubectl
+          # Stage a pinned, checksum-verified kubectl onto the PVC so the
+          # assistant can run cluster operations without a privileged base
+          # image. IDempotent: skipped when the binary already exists.
+          image: curlimages/curl:8.16.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              dest=/home/node/.openclaw/bin
+              if [ -x "$dest/kubectl" ]; then
+                echo "kubectl already staged:"; "$dest/kubectl" version --client=true 2>/dev/null || true
+                exit 0
+              fi
+              curl -fsSL -o "$dest/kubectl" https://dl.k8s.io/v1.36.2/bin/linux/amd64/kubectl
+              echo "1e9045ec32bea85da43de85f0065358529ea7c7a152eca78154fba5b58c27d82  $dest/kubectl" | sha256sum -c -
+              chmod 755 "$dest/kubectl"
+              "$dest/kubectl" version --client
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 50m
+            limits:
+              memory: 128Mi
+              cpu: 200m
+          volumeMounts:
+            - name: openclaw-home
+              mountPath: /home/node/.openclaw
+      containers:
+        - name: gateway
+          # Bump this immutable versioned tag when upgrading OpenClaw.
+          image: ghcr.io/openclaw/openclaw:2026.9.8-slim
+          imagePullPolicy: IfNotPresent
+          command:
+            - node
+            - /app/dist/index.js
+            - gateway
+            - run
+          ports:
+            - name: gateway
+              containerPort: 18789
+              protocol: TCP
+          env:
+            - name: HOME
+              value: /home/node
+            - name: OPENCLAW_CONFIG_DIR
+              value: /home/node/.openclaw
+            - name: NODE_ENV
+              value: production
+            - name: PATH
+              # Puts the staged kubectl on the agent shell's PATH.
+              value: /home/node/.openclaw/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+            - name: OPENCLAW_GATEWAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: OPENCLAW_GATEWAY_TOKEN
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: OPENROUTER_API_KEY
+                  optional: true
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 250m
+            limits:
+              memory: 2Gi
+              cpu: "1"
+          # Probes assert the JSON probe contract, not just the status code.
+          # The Control UI serves a catch-all 200 for unknown paths, so a
+          # status-only check would pass forever against an image whose probe
+          # route does not exist yet.
+          startupProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "require('http').get('http://127.0.0.1:18789/readyz', r => { let b = ''; r.on('data', d => b += d); r.on('end', () => { try { process.exit(r.statusCode < 400 && JSON.parse(b).ready === true ? 0 : 1); } catch { process.exit(1); } }); }).on('error', () => process.exit(1))"
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "require('http').get('http://127.0.0.1:18789/healthz', r => { let b = ''; r.on('data', d => b += d); r.on('end', () => { try { process.exit(r.statusCode < 400 && JSON.parse(b).ok === true ? 0 : 1); } catch { process.exit(1); } }); }).on('error', () => process.exit(1))"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "require('http').get('http://127.0.0.1:18789/readyz', r => { let b = ''; r.on('data', d => b += d); r.on('end', () => { try { process.exit(r.statusCode < 400 && JSON.parse(b).ready === true ? 0 : 1); } catch { process.exit(1); } }); }).on('error', () => process.exit(1))"
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: openclaw-home
+              mountPath: /home/node/.openclaw
+            - name: tmp-volume
+              mountPath: /tmp
+            - name: openclaw-cache
+              mountPath: /home/node/.cache
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: openclaw-home
+          persistentVolumeClaim:
+            claimName: openclaw-home-pvc
+        - name: config
+          configMap:
+            name: openclaw-config
+        - name: tmp-volume
+          emptyDir: {}
+        - name: openclaw-cache
+          emptyDir: {}

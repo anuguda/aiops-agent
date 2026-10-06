@@ -1,0 +1,79 @@
+# Safe (read-mostly) RBAC for the SRE assistant. Ported from the upstream
+# recipe's safe mode with NVIDIA-branded API groups (serving.kserve.io,
+# nim.opendatahub.io) removed along with the autoheal controller they served.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aiops-agent-sre
+  labels:
+    app.kubernetes.io/part-of: aiops-agent
+rules:
+  # Read-only core resources. Secrets are intentionally absent.
+  - apiGroups: [""]
+    resources:
+      - namespaces
+      - nodes
+      - pods
+      - pods/log
+      - services
+      - endpoints
+      - events
+      - configmaps
+      - persistentvolumeclaims
+      - persistentvolumes
+      - resourcequotas
+      - limitranges
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  # Safe mutations are restricted to scale subresources. Full controller
+  # patches can replace images, commands, or ServiceAccounts and are excluded.
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale", "statefulsets/scale"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  # OpenShift compatibility groups; inert on vanilla Kubernetes clusters.
+  - apiGroups: ["route.openshift.io"]
+    resources: ["routes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps.openshift.io"]
+    resources: ["deploymentconfigs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+  # Standard discovery and health paths.
+  - nonResourceURLs:
+      - "/healthz"
+      - "/livez"
+      - "/readyz"
+      - "/version"
+      - "/apis"
+      - "/apis/*"
+      - "/api"
+      - "/api/*"
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: aiops-agent-sre
+  labels:
+    app.kubernetes.io/part-of: aiops-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aiops-agent-sre
+subjects:
+  - kind: ServiceAccount
+    name: aiops-sre
+    namespace: aiops-agent

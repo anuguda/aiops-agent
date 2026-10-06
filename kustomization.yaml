@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deploy/namespace.yaml
+  - deploy/serviceaccount.yaml
+  - deploy/rbac.yaml
+  - deploy/pvc.yaml
+  - deploy/deployment.yaml
+  - deploy/service.yaml
+configMapGenerator:
+  - name: openclaw-config
+    # Stable name: the Deployment mounts openclaw-config directly.
+    options:
+      disableNameSuffixHash: true
+    files:
+      - openclaw.json=agent/openclaw.json
+      - AGENTS.md=agent/AGENTS.md
+      - kubernetes-sre-SKILL.md=agent/skills/kubernetes-sre/SKILL.md
