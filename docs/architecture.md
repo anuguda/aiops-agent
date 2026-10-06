@@ -16,7 +16,7 @@ component:
 | Upstream (NemoClaw recipe) | This repo | Notes |
 | --- | --- | --- |
 | Helm chart (`Chart.yaml`, templates, values) | Kustomize (root `kustomization.yaml`, resources under `deploy/`) | Follows the OpenClaw install model: single container, config seeds, no chart plumbing. |
-| NemoClaw/Hermes agent behind OpenShell gateway | OpenClaw Gateway (`ghcr.io/openclaw/openclaw:2026.7.1-2-slim`) | Same workspace/AGENTS.md/skills conventions; OpenClaw's own exec tooling replaces the sandbox shell. |
+| NemoClaw/Hermes agent behind OpenShell gateway | OpenClaw Gateway (`ghcr.io/openclaw/openclaw:2026.9.8-slim`) | Same workspace/AGENTS.md/skills conventions; OpenClaw's own exec tooling replaces the sandbox shell. |
 | SRE API proxy (`templates/sre-proxy.yaml`) + agent-only kubeconfig | Not ported | Biggest trust-model change; see below. |
 | `kubernetes-sre` skill (invoked `/chart-bin/oc --kubeconfig $SRE_KUBECONFIG`) | Same skill re-expressed for `kubectl` + in-cluster SA (`agent/skills/kubernetes-sre/SKILL.md`) | Contract preserved: inspect-first, scale-only, refuse-delete. |
 | Safe-mode RBAC ClusterRole | `deploy/rbac.yaml` (ClusterRole `aiops-agent-sre`) | NVIDIA API groups (kserve, NIM) and NVIDIA annotations dropped (see removals doc). |
@@ -24,7 +24,7 @@ component:
 | `oc` client pinning from NVIDIA mirrors | `kubectl` v1.36.2 pinned from `dl.k8s.io`, sha256-verified | Init container stages it onto the PVC (`deploy/deployment.yaml`). |
 | Skills bundle ConfigMap chunking (Python builder) | Kustomize `configMapGenerator` + init-container seed | The three workspace files (`openclaw.json`, `AGENTS.md`, skill) mount as plain ConfigMap data. |
 | `openshift-llm-deploy` skill | Not ported | Dynamo/NIM/vLLM deployment flows are NVIDIA-stack specific and out of scope. |
-| `charts/sre-autoheal-agent` controller | Not ported | Standalone LLM-driven autoheal controller; no OpenClaw dependency in the upstream design. Ship and run it separately if desired. |
+| `charts/sre-autoheal-agent` controller | Not ported | Standalone LLM-driven autoheal controller; no OpenClaw dependency in the upstream design. Ship and run it separately if desired; for the interactive loop shipped instead see `docs/auto-heal-runbook.md`. |
 | Deployer plumbing (`agentEnv`, `networkPoliciesTemplate`, `seedPlugins`) | Dropped | Single-tenant default-mesh deployment doesn't need them. |
 
 ## Trust model (and its delta vs upstream)

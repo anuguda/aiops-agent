@@ -19,7 +19,7 @@ is stripped of NVIDIA branding per the author's explicit instruction.
    AFFILIATES. All rights reserved.` plus `SPDX-License-Identifier:
    Apache-2.0`. No file in this repository carries a NVIDIA copyright header;
    project-level licensing moved to the top-level `LICENSE` (Apache-2.0,
-   Copyright 2026 Anurag Guda) and `NOTICES.md`. Upstream files with the
+   Copyright Anurag Guda 2026) and `NOTICES.md`. Upstream files with the
    header included: `Chart.yaml`, `values.yaml`, `values-scenario-*.yaml`,
    all `templates/*.yaml`, all `files/skills/*`, `scripts/build-sre-skills-bundle.py`,
    and every Python source under `files/agent/vendored/sre-autoheal/`.
@@ -74,7 +74,9 @@ is stripped of NVIDIA branding per the author's explicit instruction.
    including its `nvidia.com/gpu` event-pattern strings, RedHat-OpenShift
    remediation hooks), its RBAC templates, its `sre-autoheal.nvidia.com/*`
    annotation vocabulary, and its value-scenario tests. Documented as an
-   unported upstream component in `docs/architecture.md`.
+   unported upstream component in `docs/architecture.md`; the interactive
+   healing loop shipped instead is documented in
+   `docs/auto-heal-runbook.md`.
 
 9. **NVIDIA-authored `SOURCE_NOTICES.md`.** Upstream
    `files/skills/kubernetes-sre/SOURCE_NOTICES.md` and the repo-root

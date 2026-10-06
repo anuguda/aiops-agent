@@ -12,11 +12,11 @@ item-by-item record.
 
 ## License
 
-- This repository: Apache-2.0, Copyright 2026 Anurag Guda. See `LICENSE`.
+- This repository: Apache-2.0, Copyright Anurag Guda 2026. See `LICENSE`.
 
 ## Third-party components used at runtime
 
-- **OpenClaw** (`ghcr.io/openclaw/openclaw:2026.7.1-2-slim`) — MIT License,
+- **OpenClaw** (`ghcr.io/openclaw/openclaw:2026.9.8-slim`) — MIT License,
   Copyright (c) 2026 OpenClaw Foundation. github.com/openclaw/openclaw.
 - **kubectl** (v1.36.2, staged from dl.k8s.io) — Apache-2.0,
   Copyright The Kubernetes Authors.
@@ -31,4 +31,4 @@ item-by-item record.
 - `agent/skills/kubernetes-sre/SKILL.md` is adapted from the author's own
   Apache-2.0 skill of the same name in the source recipe above.
 - Optional add-on skills installed by `scripts/install-aiops-skills.sh` come
-  from github.com/anuguda/aiops (Apache-2.0, Copyright 2026 Anurag Guda).
+  from github.com/anuguda/aiops (Apache-2.0, Copyright Anurag Guda 2026).

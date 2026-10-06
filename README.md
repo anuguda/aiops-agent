@@ -75,6 +75,10 @@ Hard limits live in `deploy/rbac.yaml`. The skill contract
 (`agent/AGENTS.md`) enforce the same rules at prompt level, with RBAC as
 the actual guarantee.
 
+For the interactive auto-heal loop — a symptom you bring, an inspected
+diagnosis, a confirmed replica delta — see
+[docs/auto-heal-runbook.md](docs/auto-heal-runbook.md).
+
 ## Add skills from the aiops library
 
 The [aiops skills library](https://github.com/anuguda/aiops) ships a larger
@@ -126,11 +130,13 @@ documented in `docs/architecture.md`:
 
 - The `broad-no-delete` opt-in escalation RBAC mode.
 - The `openshift-llm-deploy` skill (NVIDIA inference-stack specific).
-- The `sre-autoheal-agent` controller (standalone; no OpenClaw dependency).
+- The `sre-autoheal-agent` controller (standalone, no OpenClaw dependency;
+  this repo ships an interactive loop instead — see
+  [docs/auto-heal-runbook.md](docs/auto-heal-runbook.md)).
 
 ## License
 
-Apache-2.0, Copyright 2026 Anurag Guda. This project borrows nothing
+Apache-2.0, Copyright Anurag Guda 2026. This project borrows nothing
 code-wise from any NVIDIA-licensed component at runtime — see
 [NOTICES.md](NOTICES.md) for the full third-party record.
 
