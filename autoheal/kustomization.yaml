@@ -1,0 +1,51 @@
+# Opt-in autoheal overlay. Applied only when scripts/deploy.sh runs with
+# --with-autoheal, or when applied explicitly:
+#   kubectl kustomize autoheal | kubectl apply -n <ns> -f -
+# The base kustomization at the repo root never references this tree.
+#
+# The kustomization root is autoheal/ itself on purpose: kubectl/kustomize
+# (root-only load restrictor) requires every generator input to live inside
+# the root, and the generator packages the runtime sources in sre_autoheal/
+# and knowledge/ alongside the manifests.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - manifests/serviceaccount.yaml
+  - manifests/rbac.yaml
+  - manifests/deployment.yaml
+configMapGenerator:
+  # Stable names (no hash suffix): the Deployment references these literally,
+  # matching the base kustomization's openclaw-config convention. Consequence:
+  # editing agent source or config does not roll the Deployment automatically —
+  # restart it explicitly (see manifests/README.md).
+  - name: autoheal-config
+    options:
+      disableNameSuffixHash: true
+    files:
+      - config.json=manifests/config.json
+  - name: autoheal-agent
+    options:
+      disableNameSuffixHash: true
+    files:
+      - __init__.py=sre_autoheal/__init__.py
+      - __main__.py=sre_autoheal/__main__.py
+      - actions.py=sre_autoheal/actions.py
+      - cli.py=sre_autoheal/cli.py
+      - config.py=sre_autoheal/config.py
+      - detect.py=sre_autoheal/detect.py
+      - engine.py=sre_autoheal/engine.py
+      - knowledge.py=sre_autoheal/knowledge.py
+      - kube.py=sre_autoheal/kube.py
+      - llm.py=sre_autoheal/llm.py
+      - memory.py=sre_autoheal/memory.py
+      - models.py=sre_autoheal/models.py
+      - notify.py=sre_autoheal/notify.py
+      - policy.py=sre_autoheal/policy.py
+      - storage.py=sre_autoheal/storage.py
+      - storage_runbook.py=sre_autoheal/storage_runbook.py
+      - verify.py=sre_autoheal/verify.py
+  - name: autoheal-knowledge
+    options:
+      disableNameSuffixHash: true
+    files:
+      - failure_patterns.json=knowledge/failure_patterns.json

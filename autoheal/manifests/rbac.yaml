@@ -1,0 +1,142 @@
+# RBAC profile "safe": read everything the detectors need + delete Pods +
+# patch deployments/statefulsets/daemonsets (rollout restart/undo, memory
+# limits) + scale subresources. The agent never reads Secrets, never changes
+# RBAC/SCC and never deletes anything except Pods. Human-only actions
+# (drain_node, approve_csr) are documented by the agent but never granted.
+#
+# To go read-only: delete the three mutation blocks below and set
+# policy.mode=observe in config.json — the agent detects its own RBAC limits
+# via selfsubjectaccessreviews and degrades to notify-only.
+#
+# To allow cordon/uncordon_node: add
+#   - apiGroups: [""]
+#     resources: [nodes]
+#     verbs: [patch]
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: autoheal
+  labels:
+    app: autoheal
+    app.kubernetes.io/part-of: aiops-agent
+  annotations:
+    aiops.autoheal/rbac-profile: safe
+rules:
+  # --- read paths used by the detectors ---------------------------------
+  - apiGroups: [""]
+    resources:
+      - namespaces
+      - nodes
+      - pods
+      - pods/log
+      - services
+      - endpoints
+      - events
+      - persistentvolumeclaims
+      - persistentvolumes
+      - resourcequotas
+      - limitranges
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch]
+  - apiGroups: [certificates.k8s.io]
+    resources: [certificatesigningrequests]
+    verbs: [get, list, watch]
+  # OpenShift-only detectors; harmless (unmatchable) on a plain Kubernetes
+  # cluster, where the agent skips them.
+  - apiGroups: [config.openshift.io]
+    resources: [clusteroperators, clusterversions]
+    verbs: [get, list, watch]
+  - apiGroups: [machineconfiguration.openshift.io]
+    resources: [machineconfigpools]
+    verbs: [get, list, watch]
+  - apiGroups: [authorization.k8s.io]
+    resources: [selfsubjectaccessreviews]
+    verbs: [create]
+  - apiGroups: [authentication.k8s.io]
+    resources: [selfsubjectreviews]
+    verbs: [create]
+  - nonResourceURLs:
+      - /version
+      - /apis
+      - /apis/*
+      - /api
+      - /api/*
+      - /healthz
+      - /readyz
+      - /livez
+    verbs: [get]
+  # --- SAFE tier: restart_pod, delete_evicted_pods, force_delete_pod -----
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [delete]
+  # --- rollout_restart, rollout_undo, bump_memory_limit -----------------
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [patch]
+  # --- scale -------------------------------------------------------------
+  - apiGroups: [apps]
+    resources: [deployments/scale, statefulsets/scale]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: autoheal
+  labels:
+    app: autoheal
+    app.kubernetes.io/part-of: aiops-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: autoheal
+subjects:
+  # Namespace is rewritten by scripts/deploy.sh to track AIOPS_NAMESPACE,
+  # exactly like the base's aiops-agent-sre binding.
+  - kind: ServiceAccount
+    name: autoheal
+    namespace: aiops-agent
+---
+# Incident memory: the agent persists learned remediation outcomes to a
+# single ConfigMap in its own namespace (memory.backend=configmap).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: autoheal-memory
+  labels:
+    app: autoheal
+    app.kubernetes.io/part-of: aiops-agent
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [autoheal-memory]
+    verbs: [get, patch, update]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: autoheal-memory
+  labels:
+    app: autoheal
+    app.kubernetes.io/part-of: aiops-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: autoheal-memory
+subjects:
+  - kind: ServiceAccount
+    name: autoheal
+    namespace: aiops-agent

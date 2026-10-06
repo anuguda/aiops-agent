@@ -68,15 +68,22 @@ is stripped of NVIDIA branding per the author's explicit instruction.
    `ghcr.io/openclaw/openclaw`, `busybox`, `curlimages/curl`, and the
    Kubernetes `kubectl` binary from `dl.k8s.io`.
 
-8. **Autoheal controller content.** Nothing from the upstream
-   `charts/sre-autoheal-agent` subtree was ported: the vendored multi-module
-   Python agent (loop lease, checkpointing, `knowledge/failure_patterns.json`
-   including its `nvidia.com/gpu` event-pattern strings, RedHat-OpenShift
-   remediation hooks), its RBAC templates, its `sre-autoheal.nvidia.com/*`
-   annotation vocabulary, and its value-scenario tests. Documented as an
-   unported upstream component in `docs/architecture.md`; the interactive
-   healing loop shipped instead is documented in
-   `docs/auto-heal-runbook.md`.
+8. **Autoheal controller content.** The upstream `charts/sre-autoheal-agent`
+   subtree is now ported (2026-10-05) as the strictly opt-in `autoheal/`
+   tree — runtime sources, tests, `knowledge/failure_patterns.json`, and
+   plain Kustomize manifests at `autoheal/manifests/` (applied only by
+   `scripts/deploy.sh --with-autoheal`). De-branding applied to the port:
+   NVIDIA SPDX headers stripped (item 1); the whole
+   `sre-autoheal.nvidia.com/*` annotation vocabulary re-branded to
+   `aiops.autoheal/*` (storage opt-in/expansion, `managed=false` opt-out,
+   approval, last-action, restartedAt, storage-expansion — so item 4's
+   "none are emitted" still holds for NVIDIA prefixes); Helm chart
+   plumbing and NVIDIA-parent integration points dropped; chart
+   value-scenario tests replaced by the ported runtime unittests in
+   `autoheal/tests/` (75/75 green locally). Kept deliberately:
+   `nvidia.com/gpu` event-pattern strings in `knowledge/failure_patterns.json`
+   and `detect.py` — they name the Kubernetes GPU resource, not the brand
+   (pattern simply never matches on clusters without GPU nodes).
 
 9. **NVIDIA-authored `SOURCE_NOTICES.md`.** Upstream
    `files/skills/kubernetes-sre/SOURCE_NOTICES.md` and the repo-root

@@ -7,6 +7,7 @@
 # Usage:
 #   export OPENROUTER_API_KEY="..."   # model provider key (required on first deploy)
 #   ./scripts/deploy.sh                     # deploy (creates secret from env if needed)
+#   ./scripts/deploy.sh --with-autoheal        # deploy base plus the opt-in autoheal controller
 #   ./scripts/deploy.sh --create-secret     # create/update the Secret without deploying
 #   ./scripts/deploy.sh --show-token         # print the gateway token
 #   ./scripts/deploy.sh --delete-resources   # delete aiops-agent resources, keep the namespace
@@ -23,7 +24,7 @@ NS="${AIOPS_NAMESPACE:-aiops-agent}"
 SECRET_NAME=openclaw-secrets
 
 usage() {
-  sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 for cmd in kubectl openssl; do
@@ -139,6 +140,15 @@ delete_resources() {
     configmap/openclaw-config secret/openclaw-secrets serviceaccount/aiops-sre
   kubectl delete --ignore-not-found \
     clusterrole/aiops-agent-sre clusterrolebinding/aiops-agent-sre
+  # Opt-in controller resources (see autoheal/): deleted with the same
+  # umbrella so a --delete-resources leaves nothing stale behind.
+  kubectl delete -n "$NS" --ignore-not-found \
+    deployment/autoheal serviceaccount/autoheal \
+    role/autoheal-memory rolebinding/autoheal-memory \
+    configmap/autoheal-config configmap/autoheal-agent \
+    configmap/autoheal-knowledge configmap/autoheal-memory
+  kubectl delete --ignore-not-found \
+    clusterrole/autoheal clusterrolebinding/autoheal
 }
 
 deploy() {
@@ -160,6 +170,22 @@ deploy() {
   echo "  open http://127.0.0.1:18789"
 }
 
+deploy_autoheal() {
+  ensure_namespace
+  # Opt-in autoheal overlay, applied only here — the plain deploy path
+  # never touches it. The kustomize root is autoheal/ itself: the root-only
+  # load restrictor requires generator inputs (runtime sources in
+  # sre_autoheal/) to live inside the root.
+  kubectl kustomize "$REPO_DIR/autoheal" | kubectl apply -n "$NS" -f - >/dev/null
+  # Same namespace-tracking patch as the base's ClusterRoleBinding.
+  kubectl patch clusterrolebinding autoheal --type=json \
+    -p "[{\"op\":\"replace\",\"path\":\"/subjects/0/namespace\",\"value\":\"$NS\"}]"
+  kubectl rollout status deployment/autoheal -n "$NS" --timeout=300s
+  echo
+  echo "Autoheal controller deployed: policy mode 'assisted', RBAC profile 'safe'."
+  echo "Tail it with: kubectl logs -n $NS deployment/autoheal -f"
+}
+
 case "${1:-}" in
   -h|--help) usage ;;
   --create-secret) ensure_secret ;;
@@ -169,8 +195,10 @@ case "${1:-}" in
     echo "Deleting namespace $NS and everything in it."
     kubectl delete namespace "$NS" --ignore-not-found
     kubectl delete --ignore-not-found \
-      clusterrole/aiops-agent-sre clusterrolebinding/aiops-agent-sre
+      clusterrole/aiops-agent-sre clusterrolebinding/aiops-agent-sre \
+      clusterrole/autoheal clusterrolebinding/autoheal
     ;;
+  --with-autoheal) deploy_autoheal ;;
   "") deploy ;;
   *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
 esac

@@ -116,6 +116,7 @@ re-introducing the proxy is the documented follow-up.
 | Command | Effect |
 | --- | --- |
 | `./scripts/deploy.sh` | Deploy everything (idempotent for redeploys) |
+| `./scripts/deploy.sh --with-autoheal` | Deploy everything **plus** the opt-in autoheal controller (Kustomize root: `autoheal/`) |
 | `./scripts/deploy.sh --create-secret` | Create/update the secret only |
 | `./scripts/deploy.sh --show-token` | Print the gateway token |
 | `./scripts/deploy.sh --delete-resources` | Remove the deployment, keep the namespace |
@@ -125,14 +126,22 @@ re-introducing the proxy is the documented follow-up.
 ## Scope of the adaptation
 
 Faithful to the upstream recipe where it matters (agent persona, skill
-contract, safe-mode RBAC), with three deliberate v1 exclusions, all
-documented in `docs/architecture.md`:
+contract, safe-mode RBAC), with two deliberate v1 exclusions and one opt-in
+addition, all documented in `docs/architecture.md` and
+`docs/nvidia-content-removals.md`:
 
-- The `broad-no-delete` opt-in escalation RBAC mode.
-- The `openshift-llm-deploy` skill (NVIDIA inference-stack specific).
-- The `sre-autoheal-agent` controller (standalone, no OpenClaw dependency;
-  this repo ships an interactive loop instead — see
-  [docs/auto-heal-runbook.md](docs/auto-heal-runbook.md)).
+- The `broad-no-delete` opt-in escalation RBAC mode (not ported).
+- The `openshift-llm-deploy` skill (NVIDIA inference-stack specific; not
+  ported).
+- The `sre-autoheal-agent` controller **is** ported (`autoheal/`) but is
+  strictly opt-in: nothing is deployed unless you run
+  `./scripts/deploy.sh --with-autoheal`. It runs as its own workload with
+  its own ServiceAccount and a separately-reviewable ClusterRole, speaks the
+  de-branded `aiops.autoheal/*` annotation vocabulary, and reuses the
+  OpenRouter Secret only as an optional LLM key. The interactive loop
+  ([docs/auto-heal-runbook.md](docs/auto-heal-runbook.md)) remains the
+  default healing path; controller operating notes live in
+  `autoheal/manifests/README.md`.
 
 ## License
 

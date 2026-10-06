@@ -1,0 +1,1 @@
+{"memory":{"backend":"configmap","configmap_name":"autoheal-memory"},"llm":{"provider":"openai","base_url":"https://openrouter.ai/api/v1","model":"moonshotai/kimi-k3"}}

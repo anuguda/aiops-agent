@@ -1,0 +1,98 @@
+# Zero-build controller: pure standard-library Python source, mounted from
+# ConfigMaps, runs on the stock python:3.12-slim image. Watch mode loops
+# detect -> diagnose -> decide -> act -> verify -> learn -> notify.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autoheal
+  labels:
+    app: autoheal
+    app.kubernetes.io/part-of: aiops-agent
+spec:
+  replicas: 1
+  # One agent at a time: two instances would double-act on the same incident.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: autoheal
+  template:
+    metadata:
+      labels:
+        app: autoheal
+    spec:
+      serviceAccountName: autoheal
+      # In-cluster token drives the standard-library Kubernetes API client.
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: agent
+          image: docker.io/library/python:3.12-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-m", "sre_autoheal"]
+          args: ["watch"]
+          workingDir: /opt/sre-autoheal
+          env:
+            - name: PYTHONPATH
+              value: /opt/sre-autoheal
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: SRE_AUTOHEAL_CONFIG
+              value: /etc/sre-autoheal/config.json
+            - name: SRE_AUTOHEAL_KNOWLEDGE
+              value: /opt/sre-autoheal/knowledge/failure_patterns.json
+            - name: SRE_AUTOHEAL_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            # Reuses the OpenRouter key the base deploy already manages in
+            # openclaw-secrets (OPENROUTER_API_KEY). Optional: without it —
+            # or when the key is absent — the agent runs rule-based only.
+            - name: SRE_AUTOHEAL_LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: OPENROUTER_API_KEY
+                  optional: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/sre-autoheal
+              readOnly: true
+            - name: agent-src
+              mountPath: /opt/sre-autoheal/sre_autoheal
+              readOnly: true
+            - name: knowledge
+              mountPath: /opt/sre-autoheal/knowledge
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: autoheal-config
+        - name: agent-src
+          configMap:
+            name: autoheal-agent
+        - name: knowledge
+          configMap:
+            name: autoheal-knowledge
+        # Python needs a writable tmp even with a read-only root filesystem.
+        - name: tmp
+          emptyDir: {}

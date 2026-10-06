@@ -106,19 +106,31 @@ Operating wrinkles to keep in mind (see README "Known wrinkles"):
   headless `agent exec` inside the 2 Gi gateway pod stacks a second agent
   runtime and can OOM the pod during QA-scale sessions.
 
-## Wiring the upstream controller (optional, not shipped)
+## The upstream controller (opt-in, now shipped)
 
-If you later want autonomous, unattended healing, port the upstream
-`sre-autoheal-agent` subtree deliberately:
+The interactive loop above is the default healing path. Autonomous,
+unattended healing is available too — as a strictly opt-in overlay that
+shipped with this repo on 2026-10-05:
 
-- Run it as its own workload — it has no OpenClaw dependency by design.
-- Review its RBAC separately: an unattended healer acts without a
-  confirmation gate and needs more than the read-mostly role this repo
-  grants the interactive assistant. Do not just bind `aiops-agent-sre`.
-- Replace or consciously re-adopt its annotation vocabulary: upstream used
-  `sre-autoheal.nvidia.com/*` annotation prefixes plus opt-out/approval
-  labels on namespaces. This repo emits none of them (removals item 4);
-  a port should pick a de-branded prefix.
-- Audit its `knowledge/failure_patterns.json` before running on a
-  non-NVIDIA cluster — it carries `nvidia.com/gpu` event-pattern strings
-  (removals item 8).
+```bash
+./scripts/deploy.sh --with-autoheal      # or: kubectl kustomize autoheal | kubectl apply -n <ns> -f -
+```
+
+- It runs as its own workload (`deployment/autoheal`) with its own
+  ServiceAccount and `safe`-profile ClusterRole — no OpenClaw dependency,
+  and never the assistant's session: an unattended healer needs mutations
+  the assistant must not have, so the two credentials are deliberately
+  separable and independently revocable.
+- The annotation vocabulary is de-branded to `aiops.autoheal/*`: opt out
+  per workload with `kubectl label <resource> aiops.autoheal/managed=false`;
+  approve an escalated MEDIUM-tier action with
+  `kubectl annotate <resource> aiops.autoheal/approve=<action-id>`.
+- Policy modes: `observe` (notify only), `assisted` (SAFE tier auto-executes,
+  MEDIUM tier requires the approval annotation), `automatic`. Shipped
+  default: `assisted`. `drain_node`/`approve_csr` are never granted by the
+  shipped RBAC.
+- `knowledge/failure_patterns.json` retains its `nvidia.com/gpu`
+  event-pattern strings: they match the standard Kubernetes GPU resource
+  name, harmless on clusters without GPU nodes.
+- Operating details (memory ConfigMap, storage-expansion enablement,
+  source-change restarts, CronJob alternative): `autoheal/manifests/README.md`.
