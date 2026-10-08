@@ -201,7 +201,7 @@ case "${1:-}" in
       clusterrole/aiops-agent-sre clusterrolebinding/aiops-agent-sre \
       clusterrole/autoheal clusterrolebinding/autoheal
     ;;
-  --with-autoheal) deploy_autoheal ;;
+  --with-autoheal) deploy && deploy_autoheal ;;
   "") deploy ;;
   *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
 esac
